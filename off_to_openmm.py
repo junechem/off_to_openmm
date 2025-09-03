@@ -672,6 +672,132 @@ def generate_periodic_torsion_force_xml(dihedral_types, parameters):
     return '\n'.join(xml_lines)
 
 
+def create_interaction_matrices(nonbonded_interactions, interaction_type, atom_types):
+    """Create symmetric matrices for nonbonded interactions."""
+    n_types = len(atom_types)
+    
+    if interaction_type == 'SRD':
+        # Group SRD parameters by power
+        srd_by_power = defaultdict(list)
+        for interaction in nonbonded_interactions['SRD']:
+            if len(interaction['values']) >= 3:
+                power = float(interaction['values'][1])  # P2: power
+                srd_by_power[power].append(interaction)
+        
+        matrices_by_power = {}
+        for power, params in srd_by_power.items():
+            # Initialize matrices
+            disp_matrix = [[0.0 for _ in range(n_types)] for _ in range(n_types)]
+            r0_matrix = [[0.0 for _ in range(n_types)] for _ in range(n_types)]
+            
+            for param in params:
+                atom1, atom2 = param['atom1'], param['atom2']
+                if atom1 in atom_types and atom2 in atom_types:
+                    i, j = atom_types.index(atom1), atom_types.index(atom2)
+                    
+                    # Convert units: kcal to kJ, Angstrom to nm
+                    p1_value = float(param['values'][0]) * 4.184 * (0.1**(-power))
+                    p3_value = float(param['values'][2]) * 0.1
+                    
+                    disp_matrix[i][j] = disp_matrix[j][i] = p1_value
+                    r0_matrix[i][j] = r0_matrix[j][i] = p3_value
+            
+            matrices_by_power[power] = {'disp_matrix': disp_matrix, 'r0_matrix': r0_matrix}
+        
+        return matrices_by_power
+    
+    elif interaction_type == 'EXP':
+        # Initialize matrices
+        a_matrix = [[0.0 for _ in range(n_types)] for _ in range(n_types)]
+        alpha_matrix = [[0.0 for _ in range(n_types)] for _ in range(n_types)]
+        
+        for interaction in nonbonded_interactions['EXP']:
+            if len(interaction['values']) >= 2:
+                atom1, atom2 = interaction['atom1'], interaction['atom2']
+                if atom1 in atom_types and atom2 in atom_types:
+                    i, j = atom_types.index(atom1), atom_types.index(atom2)
+                    
+                    # Convert units: kcal/mol to kJ/mol, Angstrom^-1 to nm^-1
+                    a_value = float(interaction['values'][0]) * 4.184
+                    alpha_value = float(interaction['values'][1]) / 0.1
+                    
+                    a_matrix[i][j] = a_matrix[j][i] = a_value
+                    alpha_matrix[i][j] = alpha_matrix[j][i] = alpha_value
+        
+        return {'a_matrix': a_matrix, 'alpha_matrix': alpha_matrix}
+
+
+def matrix_to_xml_string(matrix):
+    """Convert matrix to XML string format (flattened)."""
+    result = []
+    for row in matrix:
+        result.extend([str(val) for val in row])
+    return '\t'.join(result)
+
+
+def generate_srd_custom_force_xml(power, matrices, atom_types):
+    """Generate CustomNonbondedForce XML for SRD interactions."""
+    n_types = len(atom_types)
+    disp_matrix = matrices['disp_matrix']
+    r0_matrix = matrices['r0_matrix']
+    
+    power_str = str(int(power)) if power == int(power) else str(power)
+    abs_power_str = str(int(abs(power))) if abs(power) == int(abs(power)) else str(abs(power))
+    
+    xml_lines = []
+    xml_lines.append(f'<CustomNonbondedForce energy="disp/(r^{abs_power_str} + r0^{abs_power_str}); disp=dispTable(t1,t2); r0=rTable(t1,t2)" bondCutoff="2">')
+    
+    # Dispersion table
+    xml_lines.append(f'<Function name="dispTable" type="Discrete2D" xsize="{n_types}" ysize="{n_types}">')
+    xml_lines.append(matrix_to_xml_string(disp_matrix))
+    xml_lines.append('</Function>')
+    
+    # R0 table
+    xml_lines.append(f'<Function name="rTable" type="Discrete2D" xsize="{n_types}" ysize="{n_types}">')
+    xml_lines.append(matrix_to_xml_string(r0_matrix))
+    xml_lines.append('</Function>')
+    
+    # Per-particle parameter
+    xml_lines.append('<PerParticleParameter name="t"/>')
+    
+    # Atom type assignments
+    for i, atom_type in enumerate(atom_types):
+        xml_lines.append(f'<Atom type="{atom_type}" t="{i}"/>')
+    
+    xml_lines.append('</CustomNonbondedForce>')
+    return '\n'.join(xml_lines)
+
+
+def generate_exp_custom_force_xml(matrices, atom_types):
+    """Generate CustomNonbondedForce XML for EXP interactions."""
+    n_types = len(atom_types)
+    a_matrix = matrices['a_matrix']
+    alpha_matrix = matrices['alpha_matrix']
+    
+    xml_lines = []
+    xml_lines.append('<CustomNonbondedForce energy="a*exp(-alpha*r); a=aTable(t1,t2); alpha=alphaTable(t1,t2)" bondCutoff="2">')
+    
+    # A table (amplitude)
+    xml_lines.append(f'<Function name="aTable" type="Discrete2D" xsize="{n_types}" ysize="{n_types}">')
+    xml_lines.append(matrix_to_xml_string(a_matrix))
+    xml_lines.append('</Function>')
+    
+    # Alpha table (decay parameter)
+    xml_lines.append(f'<Function name="alphaTable" type="Discrete2D" xsize="{n_types}" ysize="{n_types}">')
+    xml_lines.append(matrix_to_xml_string(alpha_matrix))
+    xml_lines.append('</Function>')
+    
+    # Per-particle parameter
+    xml_lines.append('<PerParticleParameter name="t"/>')
+    
+    # Atom type assignments
+    for i, atom_type in enumerate(atom_types):
+        xml_lines.append(f'<Atom type="{atom_type}" t="{i}"/>')
+    
+    xml_lines.append('</CustomNonbondedForce>')
+    return '\n'.join(xml_lines)
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Convert CRYOFF .off force field files to OpenMM .xml format"
@@ -740,12 +866,24 @@ def main():
     if dihedral_types and parameters.get('dihedrals'):
         xml_sections.append(generate_periodic_torsion_force_xml(dihedral_types, parameters))
     
-    # TODO: Add nonbonded force sections (CustomNonbondedForce for EXP/SRD)
+    # Generate CustomNonbondedForce sections for EXP and SRD
+    if nonbonded_interactions['EXP']:
+        print("Generating EXP CustomNonbondedForce...")
+        exp_matrices = create_interaction_matrices(nonbonded_interactions, 'EXP', atom_types)
+        xml_sections.append(generate_exp_custom_force_xml(exp_matrices, atom_types))
+    
+    if nonbonded_interactions['SRD']:
+        print("Generating SRD CustomNonbondedForce...")
+        srd_matrices_by_power = create_interaction_matrices(nonbonded_interactions, 'SRD', atom_types)
+        for power in sorted(srd_matrices_by_power.keys()):
+            xml_sections.append(generate_srd_custom_force_xml(power, srd_matrices_by_power[power], atom_types))
     
     # Write output file
     print(f"Writing {args.output}...")
     with open(args.output, 'w') as f:
+        f.write('<ForceField>\n\n')
         f.write('\n\n'.join(xml_sections) + '\n')
+        f.write('\n</ForceField>\n')
     
     print("Conversion complete!")
 

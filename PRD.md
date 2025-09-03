@@ -15,24 +15,35 @@ The solution must handle multiple diverse molecular systems, including:
 - Different molecular structures (1-butanol, hydrated_cyclohexene, etc.)
 - Separate charge assignment files for each system
 
-## What We Are Building
+## What We Have Built
 
-**Core Tools:**
-1. `off_to_openmm.py` - Direct .off file to OpenMM .xml converter
-   - Parses .off files directly (not intermediate .dat files)
-   - Supports multiple molecule types in single .off file
-   - Handles bonded interactions (bonds, angles, dihedrals)
-   - Handles nonbonded interactions (Coulombic, exponential, dispersion)
-   - Allows selective molecule inclusion via command line flags
+**✅ COMPLETED: Core Tool #1**
+`off_to_openmm.py` - Complete .off file to OpenMM .xml converter
+   ✅ Direct .off file parsing (handles MOLTYP/MOL, ATOMS/ATOM variations)
+   ✅ Multi-molecule support with selective inclusion (-molnames flag)
+   ✅ Special atom handling (4*, NETF, TORQ, M, MMM)
+   ✅ Complete force field generation:
+      - AtomTypes with element extraction
+      - Residues with unique atom naming and connectivity
+      - NonbondedForce with charges (sigma=0.0, epsilon=0.0, scales=1.0)
+      - HarmonicBondForce with unit-converted parameters
+      - HarmonicAngleForce with degree-to-radian conversion
+      - PeriodicTorsionForce with phase conversion
+      - CustomNonbondedForce for EXP interactions (exponential repulsion)
+      - CustomNonbondedForce for SRD interactions (short-range dispersion, multiple powers)
+   ✅ External charge file integration (-charges flag)
+   ✅ Proper ForceField XML wrapper structure
 
-2. `pdb_preprocessor.py` - PDB file CONECT record generator
+**🔄 IN PROGRESS: Core Tool #2**
+`pdb_preprocessor.py` - PDB file CONECT record generator
    - Adds bonding information to PDB files for OpenMM compatibility
    - Uses force field .xml file to determine connectivity
 
-**Testing Infrastructure:**
-- Integration tests with real molecular systems
-- Multiple test .off files representing different chemical systems
-- Charge file testing with various molecular configurations
+**✅ COMPLETED: Testing Infrastructure**
+✅ Integration tests with real molecular systems
+✅ Multiple test .off files: 1-butanol, hydrated_cyclohexene 
+✅ Charge file testing with AtomType-Charge format
+✅ pytest framework with unit and integration test structure
 
 ## Target Audience
 
