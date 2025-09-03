@@ -29,22 +29,29 @@ This project can be broken down into two main development tasks.
 
 ### Task 1: Force Field Converter (`off_to_openmm.py`)
 
-The first and most critical task is to create a script that converts force field parameters from a `.off` file into a valid OpenMM `.xml` file.
+The first and most critical task is to create a script that converts force field parameters from a `.off` file into a valid OpenMM `.xml` file. This script must handle multiple different molecular systems and .off file formats.
 
 **Key Steps:**
 
-1.  **Parse the `.off` file:**
-    *   Read the input `.off` file provided by the user.
-    *   Identify and extract the different force field parameter sections (e.g., atom types, bonds, angles, torsions, non-bonded interactions). You will need to understand the structure of a typical `.off` file.
+1.  **Parse the `.off` file directly:**
+    *   Read the input `.off` file provided by the user (not intermediate .dat files)
+    *   Handle different .off file format variations (e.g., `[MOLTYP]` vs `[MOL]`, `[ATOMS]` vs `[ATOM]`)
+    *   Extract molecular definitions: atoms, bonds, angles, dihedrals from each molecule type
+    *   Extract final parameter definitions from `#define` statements at file end
+    *   Extract nonbonded interactions: COU (Coulombic), EXP (exponential), SRD (short-range dispersion)
 2.  **Map to OpenMM XML format:**
-    *   Translate the extracted parameters into the corresponding XML structure that OpenMM expects. This will involve creating `<AtomTypes>`, `<Bonds>`, `<Angles>`, etc., sections in the XML.
+    *   Generate `<AtomTypes>` section from unique atom types found
+    *   Generate `<Residues>` section with molecule definitions and connectivity
+    *   Generate force sections: `<HarmonicBondForce>`, `<HarmonicAngleForce>`, `<PeriodicTorsionForce>`
+    *   Generate nonbonded forces: `<CustomNonbondedForce>` for EXP and SRD interactions
 3.  **Generate the `.xml` file:**
-    *   Write the structured data into a new `.xml` file.
-    *   Ensure the output is well-formed and compliant with OpenMM's force field file standards.
+    *   Write the structured data into a well-formed OpenMM `.xml` file
+    *   Support selective molecule inclusion via `-molnames` flag
 
-Necessary Parts of "off_to_openmm.py":
-    This script should use command line flags. One important flag is -molnames which is related to which molecules to include in the .xml force field file.
-    Another important flag will be -charges, where a file with Atom Name and Charge columns can be read in and then used to create the relvant portion of the .xml file
+**Command Line Interface:**
+- `-molnames`: Specify which molecule types to include (e.g., "UNK,CYCQM")
+- `-charges`: Path to charges file with "AtomType Charge" format for charge assignment
+- Support multiple test cases: 1-butanol, hydrated_cyclohexene, and other molecular systems
     
 
 

@@ -1,22 +1,55 @@
-Problem:
-    Currently, there exists no framework for copying force field parameters from CRYOFF (Create Your Own Force Field) output (.off files)
-        to the proper sections of an OpenMM .xml force field file. Thus, if someone desired to run an AFM (Adaptive Force Matching) model on OpenMM,
-        they would have to go through the painstaking process of copying all the parameters to the .xml file by hand, which is
-        very challenging.
-    There are other difficulties associated with running simulations on OpenMM. One of those is getting the proper .pdb format.
-        Usually, .pdb files that will be run on OpenMM will not include the important section related to bonding information
-        at the bottom of the .pdb file, which is necessary to run simulations in OpenMM with custom forces like we will be doing.
-        Thus, it will be necessary to produce a standalone tool that can add this bonding information in to the bottom of the
-        .pdb file.
+# Project Requirements Document (PRD)
 
+## Problem Statement
 
-What are we building:
-    1) We are building a set of python tools which can be used to produce .xml force field files for OpenMM simulations
-    2) We are also creating a set of tools which make running simulations using OpenMM easier
-Who is it for:
-    This set of scripts is for the person who is interested in running Adaptive Force Matching based force fields
-        in OpenMM, either for enhanced speed capabilities due to using a GPU or for PIMD simulations which can be used
-        to compute nuclear quantum effects. It is also to increase the possible audience of people who would like to use
-        the AFM method to produce force fields.
-Why does it matter now:
-    It matters now because I am trying to run OpenMM simulations using AFM based models, but cannot because no current scripts exist to make this happen.
+**Primary Challenge:**
+Currently, there exists no framework for converting force field parameters from CRYOFF (Create Your Own Force Field) output (.off files) to OpenMM .xml force field files. Researchers using AFM (Adaptive Force Matching) must manually copy all parameters to .xml files by hand, which is extremely tedious, time-consuming, and error-prone.
+
+**Secondary Challenge:**
+Standard .pdb files lack the bonding information (CONECT records) required by OpenMM for simulations with custom forces, necessitating manual editing of PDB files.
+
+**Scope Expansion:**
+The solution must handle multiple diverse molecular systems, including:
+- Different molecule types (UNK, CYCQM, etc.)
+- Various .off file format variations
+- Different molecular structures (1-butanol, hydrated_cyclohexene, etc.)
+- Separate charge assignment files for each system
+
+## What We Are Building
+
+**Core Tools:**
+1. `off_to_openmm.py` - Direct .off file to OpenMM .xml converter
+   - Parses .off files directly (not intermediate .dat files)
+   - Supports multiple molecule types in single .off file
+   - Handles bonded interactions (bonds, angles, dihedrals)
+   - Handles nonbonded interactions (Coulombic, exponential, dispersion)
+   - Allows selective molecule inclusion via command line flags
+
+2. `pdb_preprocessor.py` - PDB file CONECT record generator
+   - Adds bonding information to PDB files for OpenMM compatibility
+   - Uses force field .xml file to determine connectivity
+
+**Testing Infrastructure:**
+- Integration tests with real molecular systems
+- Multiple test .off files representing different chemical systems
+- Charge file testing with various molecular configurations
+
+## Target Audience
+
+**Primary Users:**
+- Computational chemists and physicists using AFM-generated force fields
+- Researchers requiring GPU-accelerated OpenMM simulations
+- Scientists performing Path Integral Molecular Dynamics (PIMD) with nuclear quantum effects
+
+**Molecular Systems:**
+- Organic molecules (alcohols, hydrocarbons)
+- Solvated systems (molecules with explicit water)
+- Custom force field applications requiring high precision
+
+## Strategic Importance
+
+This tool suite eliminates the current bottleneck preventing AFM force field adoption in OpenMM, enabling:
+- Faster research workflows for computational chemistry
+- Broader adoption of AFM methodology
+- GPU-accelerated simulations with custom force fields
+- Advanced simulation techniques (PIMD) with AFM models

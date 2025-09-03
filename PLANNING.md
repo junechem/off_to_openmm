@@ -12,12 +12,28 @@ The application will be composed of two distinct, single-purpose command-line to
 
 ### Tool 1: Force Field Converter (`off_to_openmm.py`)
 
-*   **Input:** A `.off` file path provided as a command-line argument.
+*   **Input:** A `.off` file path and optional flags (-molnames, -charges)
 *   **Core Logic:**
-    1.  **Parser Module:** A dedicated module to read and parse the `.off` file. It will be designed to handle the specific block-based format of these files, extracting parameters for atom types, bonds, angles, torsions, and non-bonded interactions into structured Python objects.
-    2.  **Mapper/Builder Module:** This module will take the parsed Python objects and map them to the corresponding OpenMM XML structure. It will use a template-based or element-building approach to construct the XML tree.
-    3.  **XML Writer Module:** A simple module that takes the generated XML structure and writes it to a specified output file, ensuring proper formatting and validation.
-*   **Output:** A valid OpenMM `.xml` force field file.
+    1.  **Direct .off Parser:** Parse .off files directly (NOT intermediate .dat files)
+        - Handle format variations: `[MOLTYP]`/`[MOL]`, `[ATOMS]`/`[ATOM]`, etc.
+        - Extract molecule definitions per MOLTYP/MOL section
+        - Parse bonded interactions: BONDS, ANGLES, DIHEDRAL sections  
+        - Parse nonbonded interactions: COU, EXP, SRD sections
+        - Extract final `#define` parameter statements from file end
+    2.  **Multi-Molecule Support:** 
+        - Support multiple molecule types in single .off file (UNK, CYCQM, etc.)
+        - Allow selective inclusion via `-molnames` flag
+        - Handle different molecular systems (1-butanol, hydrated_cyclohexene, etc.)
+    3.  **Charge Integration:**
+        - Read separate charge files via `-charges` flag
+        - Format: "AtomType Charge" (e.g., "C1 0.24499")
+        - Integrate charges into residue definitions
+    4.  **OpenMM XML Generation:**
+        - AtomTypes section from unique atom types across all molecules
+        - Residues section with molecule definitions and connectivity
+        - Force sections: HarmonicBondForce, HarmonicAngleForce, PeriodicTorsionForce  
+        - CustomNonbondedForce sections for EXP and SRD interactions
+*   **Output:** Complete OpenMM `.xml` force field file supporting multiple molecular systems
 
 ### Tool 2: PDB Preprocessor (`pdb_preprocessor.py`)
 
