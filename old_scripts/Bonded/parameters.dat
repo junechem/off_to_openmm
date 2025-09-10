@@ -1,0 +1,19 @@
+        #define    C1_C2    HAR    0.15196336         205004.79
+        #define    C1_H1    HAR    0.10959154         287761.95
+        #define    C1_O0    HAR    0.14273703         232482.80
+        #define    C2_C2    HAR    0.15276524         198908.92
+        #define    C2_H2    HAR    0.10950625         294448.41
+        #define    H0_O0    HAR    0.95933463E-01     432111.83
+        #define    C1_C2_C2    HAR     111.92152         519.65401
+        #define    C1_C2_H2    HAR     107.85818         382.81394
+        #define    C2_C2_H2    HAR     109.43815         376.55001
+        #define    H2_C2_H2    HAR     106.40022         301.11547
+        #define    C2_C1_H1    HAR     110.93608         372.82817
+        #define    C2_C1_O0    HAR     111.62619         676.85198
+        #define    H1_C1_H1    HAR     109.04605         296.44046
+        #define    H1_C1_O0    HAR     108.93202         450.24167
+        #define    C1_O0_H0    HAR     108.33020         404.49604
+        #define    C2_C2_C2    HAR     113.01568         544.69667
+        #define    O0_C1_C2_C2    NCO     0.0000000         2.6718410      3
+        #define    C1_C2_C2_C2    NCO     0.0000000         2.6645426      3
+        #define    C2_C1_O0_H0    NCO     0.0000000         2.0079349      3

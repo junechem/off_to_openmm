@@ -1,0 +1,32 @@
+
+;Bond Type: C1-C2
+	HAR 1	FIT 1.0	700
+	3 2
+
+;Bond Type: C1-H1
+	HAR 2	FIT 1.0	700
+	7 2
+	8 2
+
+;Bond Type: C1-O0
+	HAR 1	FIT 1.0	700
+	2 1
+
+;Bond Type: C2-C2
+	HAR 2	FIT 1.0	700
+	4 3
+	5 4
+
+;Bond Type: C2-H2
+	HAR 7	FIT 1.0	700
+	9 3
+	10 3
+	11 4
+	12 4
+	13 5
+	14 5
+	15 5
+
+;Bond Type: H0-O0
+	HAR 1	FIT 1.0	700
+	6 1

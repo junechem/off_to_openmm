@@ -26,12 +26,6 @@ class PDBPreprocessor:
         self.residue_bonds = {}  # residue_name -> [(atom1, atom2), ...]
         self.residue_atom_types = {}  # residue_name -> {atom_name: atom_type}
         self.type_to_atoms = {}  # residue_name -> {atom_type: [atom_names]}
-        # Common residue name mappings
-        self.residue_mapping = {
-            'CYC': 'CYCQM',
-            'SOL': 'H2OQM',
-            'WAT': 'H2OQM'
-        }
         self._parse_xml()
     
     def _parse_xml(self):
@@ -98,6 +92,38 @@ class PDBPreprocessor:
             return self.atom_types[atom_name]
         return atom_name
     
+    def _find_xml_atom_name_for_type(self, residue_name, atom_type):
+        """Find XML atom name for a given atom type in a residue."""
+        if residue_name not in self.type_to_atoms:
+            return None
+        
+        if atom_type in self.type_to_atoms[residue_name]:
+            # Return the first XML atom name of this type
+            xml_atom_names = self.type_to_atoms[residue_name][atom_type]
+            if xml_atom_names:
+                return xml_atom_names[0]
+        
+        return None
+    
+    def _find_xml_atom_name_for_type_with_counter(self, residue_name, atom_type, type_counters):
+        """Find XML atom name for a given atom type, using counters to track multiple atoms of same type."""
+        if residue_name not in self.type_to_atoms:
+            return None
+        
+        if atom_type in self.type_to_atoms[residue_name]:
+            xml_atom_names = self.type_to_atoms[residue_name][atom_type]
+            if xml_atom_names:
+                # Get current count for this type
+                current_count = type_counters.get(atom_type, 0)
+                
+                # If we have enough XML atom names, return the next one
+                if current_count < len(xml_atom_names):
+                    xml_atom_name = xml_atom_names[current_count]
+                    type_counters[atom_type] = current_count + 1
+                    return xml_atom_name
+        
+        return None
+    
     def process_pdb(self, input_pdb, output_pdb):
         """Process PDB file: convert classes to types and add CONECT records."""
         atom_records = []
@@ -112,7 +138,10 @@ class PDBPreprocessor:
             print(f"PDB file not found: {input_pdb}")
             sys.exit(1)
         
-        # Process each line
+        # Group atoms by residue instance to handle type counting
+        residue_atoms = {}  # (residue_name, chain, seq) -> [atom_data]
+        
+        # First pass: collect all atoms by residue
         for line in lines:
             if line.startswith(('ATOM', 'HETATM')):
                 # Parse ATOM/HETATM record (PDB format specification)
@@ -123,20 +152,61 @@ class PDBPreprocessor:
                 chain_id = line[21:22]
                 residue_seq = line[22:26].strip()
                 
-                # Debug: print parsing info
-                print(f"Debug: Parsed residue_name='{residue_name}' from line: {line.strip()}")
+                res_key = (residue_name, chain_id, residue_seq)
+                if res_key not in residue_atoms:
+                    residue_atoms[res_key] = []
                 
-                # Check if atom name is a class and convert if needed
-                original_atom_name = atom_name
-                if self._is_atom_class(atom_name):
-                    atom_name = self._convert_atom_name(atom_name)
-                    # Update the line with new atom name
-                    line = line[:12] + f"{atom_name:>4}" + line[16:]
+                residue_atoms[res_key].append({
+                    'line': line,
+                    'index': atom_index,
+                    'original_name': atom_name,
+                    'residue': residue_name,
+                    'chain': chain_id,
+                    'seq': residue_seq
+                })
+            else:
+                # Keep other records as-is
+                other_records.append(line)
+        
+        # Second pass: process atoms with positional mapping
+        for res_key, atoms in residue_atoms.items():
+            residue_name, chain_id, residue_seq = res_key
+            
+            # Get XML atom names for this residue type (ordered)
+            xml_atom_names = []
+            if residue_name in self.residue_atom_types:
+                xml_atom_names = list(self.residue_atom_types[residue_name].keys())
+            
+            for atom_position, atom_data in enumerate(atoms):
+                original_atom_name = atom_data['original_name']
+                converted_atom_name = original_atom_name
+                
+                # If residue matches XML, map atoms by position and validate
+                if residue_name in self.residue_atom_types:
+                    if atom_position < len(xml_atom_names):
+                        converted_atom_name = xml_atom_names[atom_position]
+                        
+                        # Validate: check if PDB atom name matches expected atom type
+                        expected_atom_type = self.residue_atom_types[residue_name][converted_atom_name]
+                        if original_atom_name != expected_atom_type:
+                            print(f"Warning: Atom {original_atom_name} in residue {residue_name} doesn't match expected type {expected_atom_type} for position {atom_position}")
+                    else:
+                        print(f"Warning: More atoms in PDB residue {residue_name} than defined in XML")
+                        converted_atom_name = original_atom_name
+                else:
+                    # Fallback: check if atom name is a class and convert to type
+                    if self._is_atom_class(original_atom_name):
+                        converted_atom_name = self._convert_atom_name(original_atom_name)
+                
+                # Update the line with new atom name if changed
+                line = atom_data['line']
+                if converted_atom_name != original_atom_name:
+                    line = line[:12] + f"{converted_atom_name:>4}" + line[16:]
                 
                 atom_records.append({
                     'line': line,
-                    'index': atom_index,
-                    'name': atom_name,
+                    'index': atom_data['index'],
+                    'name': converted_atom_name,
                     'original_name': original_atom_name,
                     'residue': residue_name,
                     'chain': chain_id,
@@ -144,12 +214,8 @@ class PDBPreprocessor:
                 })
                 
                 # Map for CONECT generation
-                key = (residue_name, atom_name)
-                atom_index_map[key] = atom_index
-                
-            else:
-                # Keep other records as-is
-                other_records.append(line)
+                key = (residue_name, converted_atom_name)
+                atom_index_map[key] = atom_data['index']
         
         # Generate CONECT records
         conect_records = self._generate_conect_records(atom_records, atom_index_map)
@@ -157,14 +223,14 @@ class PDBPreprocessor:
         # Write output PDB
         try:
             with open(output_pdb, 'w') as f:
-                # Write ATOM/HETATM records
-                for atom in atom_records:
-                    f.write(atom['line'])
-                
-                # Write other records (excluding END if present)
+                # Write header records first (TITLE, REMARK, CRYST1, MODEL, etc.)
                 for record in other_records:
                     if not record.startswith('END'):
                         f.write(record)
+                
+                # Write ATOM/HETATM records
+                for atom in atom_records:
+                    f.write(atom['line'])
                 
                 # Write CONECT records
                 for conect in conect_records:
@@ -193,8 +259,20 @@ class PDBPreprocessor:
     def _generate_conect_records(self, atom_records, atom_index_map):
         """Generate CONECT records based on residue bond definitions."""
         conect_records = []
+        bonds_added = set()  # Track bonds globally to avoid duplicates
         
-        # Group atoms by residue
+        # Get unique residue types present in PDB
+        unique_residues = set(atom['residue'] for atom in atom_records)
+        xml_residues = set(self.residue_bonds.keys())
+        
+        # Check for residue name mismatches and provide warnings
+        missing_residues = unique_residues - xml_residues
+        if missing_residues:
+            print(f"Warning: PDB contains residues not found in XML: {', '.join(missing_residues)}")
+            print("Available XML residues:", ', '.join(xml_residues))
+            print("Continuing with available residue definitions...")
+        
+        # Group atoms by residue instance
         residues = {}
         for atom in atom_records:
             res_key = (atom['residue'], atom['chain'], atom['seq'])
@@ -203,50 +281,40 @@ class PDBPreprocessor:
             residues[res_key].append(atom)
         
         # Generate CONECT records for each residue instance
+        total_bonds_processed = 0
         for (residue_name, chain, seq), atoms in residues.items():
             if residue_name not in self.residue_bonds:
-                print(f"Warning: No bonds found for residue {residue_name}")
-                continue
+                continue  # Skip residues we don't have definitions for
             
-            # Create mapping from XML atom names to PDB indices
-            # We need to map PDB atom types to XML atom names
+            # Create mapping from XML atom names to PDB indices for this residue instance
             xml_atom_to_pdb_index = {}
             
-            if residue_name in self.type_to_atoms:
-                # Group PDB atoms by type
-                pdb_atoms_by_type = {}
-                for atom in atoms:
-                    atom_type = atom['name']  # PDB atom name is actually the type
-                    if atom_type not in pdb_atoms_by_type:
-                        pdb_atoms_by_type[atom_type] = []
-                    pdb_atoms_by_type[atom_type].append(atom)
-                
-                # Map XML atom names to PDB indices using type matching
-                for atom_type, xml_atom_names in self.type_to_atoms[residue_name].items():
-                    if atom_type in pdb_atoms_by_type:
-                        pdb_atoms = pdb_atoms_by_type[atom_type]
-                        # Map each XML atom name to a PDB atom of the same type
-                        for i, xml_atom_name in enumerate(xml_atom_names):
-                            if i < len(pdb_atoms):
-                                xml_atom_to_pdb_index[xml_atom_name] = pdb_atoms[i]['index']
+            # Now that atom names have been converted to XML format during processing,
+            # we can directly map XML atom names to PDB indices
+            for atom in atoms:
+                atom_name = atom['name']  # This is now the XML atom name
+                pdb_index = atom['index']
+                xml_atom_to_pdb_index[atom_name] = pdb_index
             
-            # Generate CONECT records for bonds in this residue
-            bonds_added = set()
-            bonds_processed = 0
+            # Generate CONECT records for bonds in this residue instance
+            bonds_in_residue = 0
             for atom1_name, atom2_name in self.residue_bonds[residue_name]:
                 if atom1_name in xml_atom_to_pdb_index and atom2_name in xml_atom_to_pdb_index:
                     idx1 = xml_atom_to_pdb_index[atom1_name]
                     idx2 = xml_atom_to_pdb_index[atom2_name]
                     
-                    # Avoid duplicate bonds
+                    # Avoid duplicate bonds globally
                     bond_key = tuple(sorted([idx1, idx2]))
                     if bond_key not in bonds_added:
                         conect_records.append(f"CONECT{idx1:5}{idx2:5}\n")
                         bonds_added.add(bond_key)
-                        bonds_processed += 1
+                        bonds_in_residue += 1
+                        total_bonds_processed += 1
             
-            print(f"Processed {bonds_processed} bonds for residue {residue_name}")
+            if bonds_in_residue > 0:
+                print(f"Added {bonds_in_residue} bonds for {residue_name} (chain {chain}, seq {seq})")
         
+        print(f"Total CONECT records generated: {total_bonds_processed}")
         return sorted(conect_records)
 
 

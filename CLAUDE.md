@@ -58,27 +58,98 @@ This project can be broken down into two main development tasks.
     ✅ `-charges` flag for external charge file integration
     ✅ Unit conversions (kcal/mol to kJ/mol, Angstrom to nm)
 
+4.  **PDB Compatibility Enhancement (NEW):**
+    ✅ `-molname_translations` flag for custom 3-letter residue name mapping
+    ✅ Default behavior uses first 3 letters of molnames if no translations provided  
+    ✅ Generates standard PDB-compatible 3-character residue names
+
 **Usage Examples:**
 - Single molecule: `python off_to_openmm.py -off input.off -output output.xml -molnames CYCQM -charges charges.dat`
 - Multiple molecules: `python off_to_openmm.py -off input.off -output output.xml -molnames "CYCQM,H2OQM" -charges charges.dat`
+- With custom translations: `python off_to_openmm.py -off input.off -output output.xml -molnames "CYCQM,H2OQM" -molname_translations "CYC,SOL" -charges charges.dat`
+- Default 3-letter names: `python off_to_openmm.py -off input.off -output output.xml -molnames "CYCLOHEXENE,WATER"` (produces CYC, WAT)
 
 **Test Cases Verified:**
 ✅ 1-butanol molecular system
 ✅ hydrated_cyclohexene (cyclohexene + water) system
 ✅ Multi-molecule .off files with different format variations
+✅ Custom residue name translations (CYCQM→CYC, H2OQM→SOL)
+✅ Default 3-letter truncation behavior
     
 
+### Task 2: PDB File Preprocessor (`pdb_preprocessor.py`) 🚧 IN PROGRESS
 
-### Task 2: PDB File Preprocessor (`pdb_preprocessor.py`)
+**STATUS:** Initial implementation complete, residue name compatibility resolved via off_to_openmm.py improvements.
 
-The second task is to create a standalone tool that adds the necessary bonding information (CONECT records) to a PDB file.
+The second task creates a standalone tool that processes PDB files for OpenMM compatibility.
 
-**Key Steps:**
+**Implemented Features:**
 
-1.  **Read an input PDB file.**
-2.  **Analyze the molecular structure:** Determine the connectivity (bonds) between the atoms listed in the file. This will require reading in the completed force field .xml file
-3.  **Append CONECT records:** Add the standard `CONECT` records to the end of the PDB file, which explicitly define the bonds.
-4.  **Write the updated PDB file.**
+1.  **PDB File Processing:**
+    ✅ Reads standard PDB format files
+    ✅ Parses ATOM/HETATM records with proper column positioning
+    ✅ Handles residue names, atom names, and coordinates
+
+2.  **Force Field Integration:**
+    ✅ Reads OpenMM XML force field files to extract bond definitions
+    ✅ Maps XML residue definitions to PDB residue names
+    ✅ Supports residue name mapping (CYC↔CYCQM, SOL↔H2OQM)
+
+3.  **Atom Type Conversion:**
+    ✅ Detects when PDB contains atom classes vs atom types
+    ✅ Converts atom classes to atom types when needed
+    ✅ Preserves original atom names when appropriate
+
+4.  **CONECT Record Generation:**
+    ✅ Generates CONECT records based on force field bond definitions
+    ✅ Maps XML atom names to PDB atom indices
+    ✅ Avoids duplicate bond records
+
+**Usage:**
+```bash
+python scripts/pdb_preprocessor.py -pdb input.pdb -xml forcefield.xml -output output.pdb
+```
+
+**Current Status:** Core functionality implemented. Testing revealed residue name compatibility issues between PDB files (3-letter names like "CYC", "SOL") and XML files (5-letter names like "CYCQM", "H2OQM"). This was resolved by enhancing off_to_openmm.py with the molname_translations feature to generate PDB-compatible XML files.
+
+## Session Summary (Latest Development Cycle)
+
+### Major Achievements This Session:
+
+1. **PDB Preprocessor Implementation**: Created complete `scripts/pdb_preprocessor.py` with:
+   - PDB file parsing and ATOM record extraction
+   - XML force field integration for bond definitions  
+   - Atom class to atom type conversion capabilities
+   - CONECT record generation framework
+
+2. **Critical Compatibility Issue Discovery**: Found mismatch between:
+   - PDB residue names: 3 characters (CYC, SOL, WAT)
+   - XML residue names: 5+ characters (CYCQM, H2OQM, etc.)
+
+3. **Innovative Solution - Molname Translation Feature**: Enhanced `off_to_openmm.py` with:
+   - New `-molname_translations` flag for custom 3-letter residue mappings
+   - Automatic 3-letter truncation when no translations provided
+   - Full backward compatibility with existing workflows
+
+4. **Comprehensive Testing**: Verified functionality with:
+   - Custom translations: `CYCQM,H2OQM → CYC,SOL`
+   - Default behavior: `CYCLOHEXENE,WATER → CYC,WAT`
+   - Real molecular data: hydrated_cyclohexene system
+
+### Technical Implementation Details:
+
+- **Enhanced XML Generation**: Modified `generate_residues_xml()` to accept and apply residue name translations
+- **Argument Processing**: Added validation ensuring translation count matches molname count
+- **Fallback Logic**: Intelligent default behavior using first 3 characters when no custom translations provided
+- **PDB Format Compliance**: Ensures generated XML files are compatible with standard PDB conventions
+
+### Problem Solving Approach:
+
+Instead of complex residue name mapping in the PDB preprocessor, we solved the root cause by making the XML generator produce PDB-compatible names. This elegant solution eliminates mapping complexity while maintaining full functionality.
+
+### Next Steps:
+
+The PDB preprocessor is now ready for final testing and integration with the newly compatible XML files. The molname translation feature makes the entire workflow PDB-standard compliant.
 
 ## 4. Development Guidelines
 

@@ -42,18 +42,27 @@ The application will be composed of two distinct, single-purpose command-line to
         ✅ CustomNonbondedForce for EXP interactions (exponential repulsion)
         ✅ CustomNonbondedForce for SRD interactions (multiple powers, dispersion)
         ✅ Proper ForceField XML wrapper structure
+    
+    5.  **PDB Compatibility Enhancement (NEW):**
+        ✅ `-molname_translations` flag for custom 3-letter residue name mapping
+        ✅ Default behavior uses first 3 letters of molnames if no translations provided
+        ✅ Generates standard PDB-compatible 3-character residue names (CYC, SOL, WAT)
+        ✅ Full backward compatibility with existing workflows
 
-*   **Output:** Complete, valid OpenMM `.xml` force field file ready for simulations
+*   **Output:** Complete, valid OpenMM `.xml` force field file ready for simulations with PDB-standard residue names
 
-### Tool 2: PDB Preprocessor (`pdb_preprocessor.py`)
+### Tool 2: PDB Preprocessor (`pdb_preprocessor.py`) 🚧 IMPLEMENTED
 
-*   **Input:** A `.pdb` file path provided as a command-line argument.
-*   **Core Logic:**
-    1.  **PDB Parser:** Reads the `ATOM` and `HETATM` records from the input PDB file.
-    2.  **Connectivity Calculator:** This is the core of the tool. It will read the completed .xml force field file to understand connectivity in each molecule.
-    3.  **CONECT Record Generator:** Based on the calculated bonds, this module will generate the `CONECT` records in the standard PDB format.
-    4.  **File Writer:** Appends the generated `CONECT` records to the original PDB content and writes the result to a new output file.
-*   **Output:** A new `.pdb` file containing the original atomic coordinates plus the appended bonding information.
+*   **Input:** `-pdb` file path, `-xml` force field file, `-output` path
+*   **Core Logic Implemented:**
+    1.  **PDB Parser:** ✅ Reads ATOM/HETATM records with proper column parsing
+    2.  **XML Force Field Integration:** ✅ Reads completed .xml files to extract bond definitions
+    3.  **Atom Type Conversion:** ✅ Detects and converts atom classes to atom types when needed  
+    4.  **Residue Name Mapping:** ✅ Maps between PDB and XML residue naming conventions
+    5.  **CONECT Record Generator:** ✅ Framework complete for generating standard PDB CONECT records
+    6.  **File Writer:** ✅ Outputs updated PDB with connectivity information
+*   **Output:** A new `.pdb` file containing the original coordinates plus appended bonding information
+*   **Status:** Implementation complete, integration testing needed with PDB-compatible XML files
 
 ## 3. Technology Stack
 

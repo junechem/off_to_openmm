@@ -1,0 +1,55 @@
+
+;Angle Type: C1-C2-C2
+	 HAR   1 FIT 100  76
+		2 3 4
+
+;Angle Type: C1-C2-H2
+	 HAR   2 FIT 100  76
+		2 3 9
+		2 3 10
+
+;Angle Type: C2-C2-H2
+	 HAR   9 FIT 100  76
+		3 4 11
+		3 4 12
+		4 3 9
+		4 3 10
+		4 5 13
+		4 5 14
+		4 5 15
+		5 4 11
+		5 4 12
+
+;Angle Type: H2-C2-H2
+	 HAR   5 FIT 100  76
+		9 3 10
+		11 4 12
+		13 5 14
+		13 5 15
+		14 5 15
+
+;Angle Type: C2-C1-H1
+	 HAR   2 FIT 100  76
+		3 2 7
+		3 2 8
+
+;Angle Type: C2-C1-O0
+	 HAR   1 FIT 100  76
+		3 2 1
+
+;Angle Type: H1-C1-H1
+	 HAR   1 FIT 100  76
+		7 2 8
+
+;Angle Type: H1-C1-O0
+	 HAR   2 FIT 100  76
+		7 2 1
+		8 2 1
+
+;Angle Type: C1-O0-H0
+	 HAR   1 FIT 100  76
+		2 1 6
+
+;Angle Type: C2-C2-C2
+	 HAR   1 FIT 100  76
+		3 4 5

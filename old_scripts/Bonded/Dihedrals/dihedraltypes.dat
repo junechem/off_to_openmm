@@ -1,0 +1,12 @@
+
+;Dihedral Type: O0-C1-C2-C2
+	 NCO   1 FIT 2.5   X   Y
+		1 2 3 4
+
+;Dihedral Type: C1-C2-C2-C2
+	 NCO   1 FIT 2.5   X   Y
+		2 3 4 5
+
+;Dihedral Type: C2-C1-O0-H0
+	 NCO   1 FIT 2.5   X   Y
+		3 2 1 6
