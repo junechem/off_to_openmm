@@ -113,17 +113,68 @@ class OffFileParser:
                     atom_id = int(atom_id_str)
                     atom_name = parts[1]
                     atom_type = parts[2]
-                    self.molecules[mol_name]['atoms'][atom_id] = {
+                    is_virtual_site = '*' in parts[0]
+                    
+                    atom_data = {
                         'name': atom_name,
                         'type': atom_type,
-                        'special': '*' in parts[0]  # Mark if it's a special atom
+                        'special': is_virtual_site
                     }
+                    
+                    # Parse virtual site definition if present
+                    if is_virtual_site and len(parts) > 3:
+                        vsite_def = self._parse_virtual_site_definition(' '.join(parts[3:]))
+                        if vsite_def:
+                            atom_data['virtual_site'] = vsite_def
+                    
+                    self.molecules[mol_name]['atoms'][atom_id] = atom_data
                 except ValueError:
                     # Skip lines that can't be parsed as atoms
                     pass
             i += 1
             
         return i
+    
+    def _parse_virtual_site_definition(self, definition):
+        """Parse virtual site definition from .off format.
+        
+        Format: "3: 0.6 1 0.2 2 0.2 3" means 3 atoms with weights 0.6, 0.2, 0.2
+        for atoms 1, 2, 3 respectively.
+        """
+        try:
+            parts = definition.split()
+            if len(parts) < 2:
+                return None
+                
+            # Extract number of atoms and colon
+            num_atoms_str = parts[0].rstrip(':')
+            num_atoms = int(num_atoms_str)
+            
+            # Parse weight-atom pairs
+            weights = []
+            atom_refs = []
+            
+            i = 1
+            while i < len(parts) and len(weights) < num_atoms:
+                if i < len(parts):
+                    weight = float(parts[i])
+                    weights.append(weight)
+                if i + 1 < len(parts):
+                    atom_ref = int(parts[i + 1])
+                    atom_refs.append(atom_ref)
+                i += 2
+            
+            if len(weights) == num_atoms and len(atom_refs) == num_atoms:
+                return {
+                    'num_atoms': num_atoms,
+                    'weights': weights,
+                    'atom_refs': atom_refs
+                }
+                
+        except (ValueError, IndexError):
+            pass
+            
+        return None
     
     def _parse_bonds_section(self, lines, start_idx, mol_name):
         """Parse bonds section."""
@@ -381,9 +432,8 @@ def get_unique_atom_types(molecules, selected_molnames=None):
         if selected_molnames is None or mol_name in selected_molnames:
             for atom_data in mol_data['atoms'].values():
                 atom_type = atom_data['type']
-                # Skip special atoms like NETF, TORQ, and special marked atoms
-                if (atom_type not in ['NETF', 'TORQ', 'M', 'MMM'] and 
-                    not atom_data.get('special', False) and 
+                # Skip only NETF and TORQ atoms, but include virtual sites (M, MMM)
+                if (atom_type not in ['NETF', 'TORQ'] and 
                     atom_type not in unique_types):
                     unique_types.append(atom_type)
     
@@ -419,9 +469,8 @@ def create_unique_atom_names(molecules, selected_molnames=None):
                 atom_data = mol_data['atoms'][atom_id]
                 atom_type = atom_data['type']
                 
-                # Skip special atoms like NETF, TORQ, M, MMM, and special marked atoms
-                if (atom_type in ['NETF', 'TORQ', 'M', 'MMM'] or 
-                    atom_data.get('special', False)):
+                # Skip only NETF and TORQ atoms, but include virtual sites (M, MMM)
+                if atom_type in ['NETF', 'TORQ']:
                     continue
                     
                 element = atom_type[0]  # First letter is the element
@@ -457,18 +506,23 @@ def generate_residues_xml(molecules, selected_molnames=None, molname_translation
                 residue_name = molname_translations[mol_name]
             xml_lines.append(f'<Residue name="{residue_name}">')
             
-            # Add atoms (without charges, skip special atoms)
+            # Add atoms (without charges, skip only NETF/TORQ atoms)
+            virtual_sites = []  # Collect virtual sites for later processing
+            
             for atom_id in sorted(mol_data['atoms'].keys()):
                 atom_data = mol_data['atoms'][atom_id]
                 atom_type = atom_data['type']
                 
-                # Skip special atoms
-                if (atom_type in ['NETF', 'TORQ', 'M', 'MMM'] or 
-                    atom_data.get('special', False)):
+                # Skip only NETF and TORQ atoms, but include virtual sites (M, MMM)
+                if atom_type in ['NETF', 'TORQ']:
                     continue
                 
                 unique_name = atom_id_to_name[(mol_name, atom_id)]
                 xml_lines.append(f'<Atom name="{unique_name}" type="{atom_type}"/>')
+                
+                # Collect virtual site information
+                if atom_data.get('virtual_site'):
+                    virtual_sites.append((atom_id, atom_data, unique_name))
             
             # Add bonds (using unique names)
             for bond in mol_data['bonds']:
@@ -478,6 +532,42 @@ def generate_residues_xml(molecules, selected_molnames=None, molname_translation
                     atom1_name = atom_id_to_name[(mol_name, atom1_id)]
                     atom2_name = atom_id_to_name[(mol_name, atom2_id)]
                     xml_lines.append(f'<Bond atomName1="{atom1_name}" atomName2="{atom2_name}"/>')
+            
+            # Add virtual sites
+            for vsite_atom_id, vsite_data, vsite_name in virtual_sites:
+                vsite_def = vsite_data['virtual_site']
+                
+                # Convert atom references to atom names
+                ref_atom_names = []
+                valid_vsite = True
+                
+                for ref_atom_id in vsite_def['atom_refs']:
+                    if (mol_name, ref_atom_id) in atom_id_to_name:
+                        ref_atom_names.append(atom_id_to_name[(mol_name, ref_atom_id)])
+                    else:
+                        valid_vsite = False
+                        break
+                
+                if valid_vsite and vsite_def['num_atoms'] == 3:
+                    # Generate average3 virtual site
+                    xml_lines.append(
+                        f'<VirtualSite type="average3" siteName="{vsite_name}" '
+                        f'atomName1="{ref_atom_names[0]}" '
+                        f'atomName2="{ref_atom_names[1]}" '
+                        f'atomName3="{ref_atom_names[2]}" '
+                        f'weight1="{vsite_def["weights"][0]}" '
+                        f'weight2="{vsite_def["weights"][1]}" '
+                        f'weight3="{vsite_def["weights"][2]}"/>'
+                    )
+                elif valid_vsite and vsite_def['num_atoms'] == 2:
+                    # Generate average2 virtual site
+                    xml_lines.append(
+                        f'<VirtualSite type="average2" siteName="{vsite_name}" '
+                        f'atomName1="{ref_atom_names[0]}" '
+                        f'atomName2="{ref_atom_names[1]}" '
+                        f'weight1="{vsite_def["weights"][0]}" '
+                        f'weight2="{vsite_def["weights"][1]}"/>'
+                    )
             
             xml_lines.append('</Residue>')
     
