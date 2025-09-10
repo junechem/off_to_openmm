@@ -442,7 +442,7 @@ def create_unique_atom_names(molecules, selected_molnames=None):
     return atom_id_to_name
 
 
-def generate_residues_xml(molecules, selected_molnames=None):
+def generate_residues_xml(molecules, selected_molnames=None, molname_translations=None):
     """Generate Residues XML section without charges, using unique atom names."""
     xml_lines = ['<Residues>']
     
@@ -451,7 +451,11 @@ def generate_residues_xml(molecules, selected_molnames=None):
     
     for mol_name, mol_data in molecules.items():
         if selected_molnames is None or mol_name in selected_molnames:
-            xml_lines.append(f'<Residue name="{mol_name}">')
+            # Use translation if provided, otherwise use original name
+            residue_name = mol_name
+            if molname_translations and mol_name in molname_translations:
+                residue_name = molname_translations[mol_name]
+            xml_lines.append(f'<Residue name="{residue_name}">')
             
             # Add atoms (without charges, skip special atoms)
             for atom_id in sorted(mol_data['atoms'].keys()):
@@ -812,13 +816,29 @@ def main():
         "-charges", 
         help="File with Atom Name and Charge columns for charge assignment"
     )
+    parser.add_argument(
+        "-molname_translations",
+        help="Comma-separated list of 3-letter residue names corresponding to molnames (e.g., 'CYC,SOL')"
+    )
     
     args = parser.parse_args()
     
     # Parse selected molecule names
     selected_molnames = None
+    molname_translations = {}
     if args.molnames:
         selected_molnames = [name.strip() for name in args.molnames.split(',')]
+        
+        # Handle molname translations
+        if args.molname_translations:
+            translations = [name.strip() for name in args.molname_translations.split(',')]
+            if len(translations) != len(selected_molnames):
+                print(f"Error: Number of translations ({len(translations)}) must match number of molnames ({len(selected_molnames)})")
+                sys.exit(1)
+            molname_translations = dict(zip(selected_molnames, translations))
+        else:
+            # Use first 3 letters of each molname as default translation
+            molname_translations = {name: name[:3] for name in selected_molnames}
     
     # Parse .off file
     print(f"Parsing {args.off}...")
@@ -845,7 +865,7 @@ def main():
     xml_sections.append(generate_atomtypes_xml(atom_types))
     
     # Residues section (without charges)
-    xml_sections.append(generate_residues_xml(molecules, selected_molnames))
+    xml_sections.append(generate_residues_xml(molecules, selected_molnames, molname_translations))
     
     # NonbondedForce section for charges
     if charges:
