@@ -138,74 +138,29 @@ class PDBPreprocessor:
             print(f"PDB file not found: {input_pdb}")
             sys.exit(1)
         
-        # Group atoms by residue instance to handle type counting
-        residue_atoms = {}  # (residue_name, chain, seq) -> [atom_data]
-        
-        # First pass: collect all atoms by residue
+        # Process each line with simple approach
         for line in lines:
             if line.startswith(('ATOM', 'HETATM')):
                 # Parse ATOM/HETATM record (PDB format specification)
                 record_type = line[0:6].strip()
                 atom_index = int(line[6:11].strip())
                 atom_name = line[12:16].strip()
-                residue_name = line[17:20].strip()  # Standard PDB: columns 18-20 for residue name
+                residue_name = line[17:20].strip()
                 chain_id = line[21:22]
                 residue_seq = line[22:26].strip()
                 
-                res_key = (residue_name, chain_id, residue_seq)
-                if res_key not in residue_atoms:
-                    residue_atoms[res_key] = []
+                original_atom_name = atom_name
+                converted_atom_name = atom_name
                 
-                residue_atoms[res_key].append({
-                    'line': line,
-                    'index': atom_index,
-                    'original_name': atom_name,
-                    'residue': residue_name,
-                    'chain': chain_id,
-                    'seq': residue_seq
-                })
-            else:
-                # Keep other records as-is
-                other_records.append(line)
-        
-        # Second pass: process atoms with positional mapping
-        for res_key, atoms in residue_atoms.items():
-            residue_name, chain_id, residue_seq = res_key
-            
-            # Get XML atom names for this residue type (ordered)
-            xml_atom_names = []
-            if residue_name in self.residue_atom_types:
-                xml_atom_names = list(self.residue_atom_types[residue_name].keys())
-            
-            for atom_position, atom_data in enumerate(atoms):
-                original_atom_name = atom_data['original_name']
-                converted_atom_name = original_atom_name
-                
-                # If residue matches XML, map atoms by position and validate
-                if residue_name in self.residue_atom_types:
-                    if atom_position < len(xml_atom_names):
-                        converted_atom_name = xml_atom_names[atom_position]
-                        
-                        # Validate: check if PDB atom name matches expected atom type
-                        expected_atom_type = self.residue_atom_types[residue_name][converted_atom_name]
-                        if original_atom_name != expected_atom_type:
-                            print(f"Warning: Atom {original_atom_name} in residue {residue_name} doesn't match expected type {expected_atom_type} for position {atom_position}")
-                    else:
-                        print(f"Warning: More atoms in PDB residue {residue_name} than defined in XML")
-                        converted_atom_name = original_atom_name
-                else:
-                    # Fallback: check if atom name is a class and convert to type
-                    if self._is_atom_class(original_atom_name):
-                        converted_atom_name = self._convert_atom_name(original_atom_name)
-                
-                # Update the line with new atom name if changed
-                line = atom_data['line']
-                if converted_atom_name != original_atom_name:
+                # Check if atom name is a class and convert if needed
+                if self._is_atom_class(atom_name):
+                    converted_atom_name = self._convert_atom_name(atom_name)
+                    # Update the line with new atom name
                     line = line[:12] + f"{converted_atom_name:>4}" + line[16:]
                 
                 atom_records.append({
                     'line': line,
-                    'index': atom_data['index'],
+                    'index': atom_index,
                     'name': converted_atom_name,
                     'original_name': original_atom_name,
                     'residue': residue_name,
@@ -214,8 +169,13 @@ class PDBPreprocessor:
                 })
                 
                 # Map for CONECT generation
-                key = (residue_name, converted_atom_name)
-                atom_index_map[key] = atom_data['index']
+                key = (residue_name, atom_name)
+                atom_index_map[key] = atom_index
+                
+            elif not line.startswith(('TER', 'CONECT', 'END')):
+                # Keep other records but skip TER, CONECT, END since we'll regenerate them
+                other_records.append(line)
+        
         
         # Generate CONECT records
         conect_records = self._generate_conect_records(atom_records, atom_index_map)
