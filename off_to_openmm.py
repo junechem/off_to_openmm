@@ -191,8 +191,8 @@ class OffFileParser:
             if line.startswith('[') or not line:
                 break
                 
-            if line.startswith('HAR'):
-                # New bond group definition
+            if line.startswith(('HAR', 'QUA')):
+                # New bond group definition (HAR = harmonic, QUA = quartic)
                 current_bond_group = line
                 i += 1
                 continue
@@ -712,6 +712,44 @@ def generate_harmonic_bond_force_xml(bond_types, parameters):
     return '\n'.join(xml_lines)
 
 
+def generate_custom_bond_force_xml(bond_types, parameters):
+    """Generate CustomBondForce XML section for QUA bonds."""
+    qua_bonds = []
+    
+    # First, check if there are any QUA bonds
+    for bond_key, bond_info in bond_types.items():
+        type1, type2 = bond_info['type1'], bond_info['type2']
+        
+        # Look for QUA parameter in bonds parameters
+        param_key = f"{type1}_{type2}"
+        if param_key not in parameters.get('bonds', {}):
+            param_key = f"{type2}_{type1}"
+        
+        if param_key in parameters.get('bonds', {}):
+            param_data = parameters['bonds'][param_key]
+            if param_data['type'] == 'QUA' and len(param_data['values']) >= 4:
+                # QUA parameters from #define section (already in correct units)
+                r0 = float(param_data['values'][0])  # nm
+                k2 = float(param_data['values'][1])  # kJ/(mol*nm²)
+                k3 = float(param_data['values'][2])  # kJ/(mol*nm³)
+                k4 = float(param_data['values'][3])  # kJ/(mol*nm⁴)
+                
+                qua_bonds.append(f'<Bond type1="{type1}" type2="{type2}" r0="{r0}" k2="{k2}" k3="{k3}" k4="{k4}"/>')
+    
+    # Only generate CustomBondForce if there are QUA bonds
+    if not qua_bonds:
+        return ""
+    
+    xml_lines = ['<CustomBondForce energy="(k2/2)*(r-r0)^2 + (k3/3)*(r-r0)^3 + (k4/4)*(r-r0)^4">']
+    xml_lines.append('<PerBondParameter name="r0"/>')
+    xml_lines.append('<PerBondParameter name="k2"/>')
+    xml_lines.append('<PerBondParameter name="k3"/>')
+    xml_lines.append('<PerBondParameter name="k4"/>')
+    xml_lines.extend(qua_bonds)
+    xml_lines.append('</CustomBondForce>')
+    return '\n'.join(xml_lines)
+
+
 def generate_harmonic_angle_force_xml(angle_types, parameters):
     """Generate HarmonicAngleForce XML section."""
     xml_lines = ['<HarmonicAngleForce>']
@@ -969,6 +1007,9 @@ def main():
     # Generate bonded force sections
     if bond_types and parameters.get('bonds'):
         xml_sections.append(generate_harmonic_bond_force_xml(bond_types, parameters))
+        custom_bond_xml = generate_custom_bond_force_xml(bond_types, parameters)
+        if custom_bond_xml:  # Only add if there are QUA bonds
+            xml_sections.append(custom_bond_xml)
     
     if angle_types and parameters.get('angles'):
         xml_sections.append(generate_harmonic_angle_force_xml(angle_types, parameters))
