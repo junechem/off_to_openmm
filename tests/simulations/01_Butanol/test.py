@@ -18,6 +18,59 @@ friction_coeff  = 2/picosecond
 dispcorr_freq   = 25  # steps
 nmol            = 125  # molecules
 rcut            = 1E-9  # meters
+max_bond_exclusions = 2  # NEW: Exclude interactions up to N bonds away
+
+def replace_nonbonded_with_matching_exclusions(system):
+    """
+    Replace NonbondedForce with a new one having identical exclusions to CustomNonbondedForce.
+    """
+    # Find forces
+    old_nonbonded = None
+    custom_force = None
+    nonbonded_index = -1
+    
+    for i, force in enumerate(system.getForces()):
+        if isinstance(force, mm.NonbondedForce):
+            old_nonbonded = force
+            nonbonded_index = i
+        elif isinstance(force, mm.CustomNonbondedForce) and custom_force is None:
+            custom_force = force
+    
+    if not old_nonbonded or not custom_force:
+        raise ValueError("Missing NonbondedForce or CustomNonbondedForce")
+    
+    # Create new NonbondedForce with same settings
+    new_nonbonded = mm.NonbondedForce()
+    new_nonbonded.setNonbondedMethod(old_nonbonded.getNonbondedMethod())
+    new_nonbonded.setCutoffDistance(old_nonbonded.getCutoffDistance())
+    new_nonbonded.setEwaldErrorTolerance(old_nonbonded.getEwaldErrorTolerance())
+    new_nonbonded.setUseDispersionCorrection(old_nonbonded.getUseDispersionCorrection())
+    new_nonbonded.setUseSwitchingFunction(old_nonbonded.getUseSwitchingFunction())
+    if old_nonbonded.getUseSwitchingFunction():
+        new_nonbonded.setSwitchingDistance(old_nonbonded.getSwitchingDistance())
+    
+    # Verify PME method is preserved
+    print(f"NonbondedMethod: {new_nonbonded.getNonbondedMethod()}")
+    print(f"EwaldErrorTolerance: {new_nonbonded.getEwaldErrorTolerance()}")
+    if new_nonbonded.getNonbondedMethod() == mm.NonbondedForce.PME:
+        print("PME method correctly configured")
+    
+    # Copy particles
+    for i in range(old_nonbonded.getNumParticles()):
+        charge, sigma, epsilon = old_nonbonded.getParticleParameters(i)
+        new_nonbonded.addParticle(charge, sigma, epsilon)
+    
+    # Copy exclusions from CustomNonbondedForce
+    for i in range(custom_force.getNumExclusions()):
+        p1, p2 = custom_force.getExclusionParticles(i)
+        new_nonbonded.addException(p1, p2, 0.0*elementary_charge**2, 0.0*nanometer, 0.0*kilojoule_per_mole)
+    
+    # Replace in system
+    system.removeForce(nonbonded_index)
+    system.addForce(new_nonbonded)
+    
+    print(f"Replaced NonbondedForce: {new_nonbonded.getNumExceptions()} exceptions")
+    return new_nonbonded.getNumExceptions()
 
 ### r^-6 Dispersion Correction Function
 def get_r6_correction(forcefield_xml, topology, cutoff_nm):
@@ -109,7 +162,7 @@ def get_r6_correction(forcefield_xml, topology, cutoff_nm):
 
 
 
-pdb = PDBFile('conf.pdb')
+pdb = PDBFile('conf_fixed.pdb')
 forcefield = ForceField('forcefield.xml')
 system = forcefield.createSystem(pdb.topology, nonbondedMethod=app.PME, nonbondedCutoff=rcut*meter)
 
@@ -134,49 +187,19 @@ for force in system.getForces():
             force.setUseLongRangeCorrection(False)
 print("\n--- Custom Force Configuration Complete ---")
 
+# MODIFIED SECTION: Replace NonbondedForce with matching exclusions
+print(f"\n--- Replacing NonbondedForce with Matching Exclusions ---")
+exclusion_count = replace_nonbonded_with_matching_exclusions(system)
+print(f"NonbondedForce now has identical exclusions to CustomNonbondedForce")
 
+# Check NonbondedForce info
+for force in system.getForces():
+    if isinstance(force, mm.NonbondedForce):
+        print(f"NonbondedForce has {force.getNumExceptions()} exceptions")
+        break
 
-
-
-
-# Add NonbondedForce for PME electrostatics (matching CustomNonbondedForce exclusions)
-nonbonded = NonbondedForce()
-nonbonded.setNonbondedMethod(NonbondedForce.PME)
-nonbonded.setCutoffDistance(rcut*meter)
-
-# Add exclusions matching CustomNonbondedForce bondCutoff="2" (up to 2 bonds away)
-# Build bond graph efficiently
-atom_list = list(pdb.topology.atoms())
-atom_to_index = {atom: i for i, atom in enumerate(atom_list)}
-bond_graph = {i: set() for i in range(len(atom_list))}
-
-# Build adjacency list
-for bond in pdb.topology.bonds():
-    i, j = atom_to_index[bond.atom1], atom_to_index[bond.atom2]
-    bond_graph[i].add(j)
-    bond_graph[j].add(i)
-
-# Find all pairs within 2 bonds
-exclusions = set()
-for i in range(len(atom_list)):
-    # 1 bond away (directly bonded)
-    for j in bond_graph[i]:
-        if i < j:
-            exclusions.add((i, j))
-    
-    # 2 bonds away (1-3 interactions)
-    for j in bond_graph[i]:
-        for k in bond_graph[j]:
-            if i < k and k not in bond_graph[i]:
-                exclusions.add((i, k))
-
-# Add exceptions
-for i, j in exclusions:
-    nonbonded.addException(i, j, 0.0*elementary_charge**2, 0.0*nanometer, 0.0*kilojoule_per_mole)
-
-system.addForce(nonbonded)
 n_beads = 32
-system.addForce(RPMDMonteCarloBarostat(pressure))
+system.addForce(MonteCarloBarostat(pressure, temperature, 25))
 
 # Setup dispersion correction
 pcorr = get_r6_correction('forcefield.xml', pdb.topology, rcut*1e9)
@@ -189,7 +212,7 @@ for f in system.getForces():
 for i, f in enumerate(system.getForces()):
     f.setForceGroup(i)
 
-integrator = RPMDIntegrator(n_beads, temperature, friction_coeff, timestep_size)
+integrator = LangevinIntegrator(temperature, friction_coeff, timestep_size)
 platform = Platform.getPlatformByName('CUDA')
 properties = {'CudaPrecision': 'mixed'}
 simulation = Simulation(pdb.topology, system, integrator)
@@ -226,7 +249,7 @@ for i in np.arange(0, length/timestep_size, dispcorr_freq):
     pressure_correction = pcorr(volume_m3)
     new_p = 1 - pressure_correction  # Same pattern as working Water_Example
     #print(f"Volume: {volume_m3:.6e} m³, Pcorr: {pressure_correction:.6f} bar, New P: {new_p:.6f} bar")
-    simulation.context.setParameter(RPMDMonteCarloBarostat.Pressure(), new_p*bar)
+    simulation.context.setParameter(MonteCarloBarostat.Pressure(), new_p*bar)
     simulation.step(dispcorr_freq)
 
 print("\n=== FINAL ENERGIES (after simulation) ===")
@@ -243,4 +266,3 @@ positions = simulation.context.getState(getPositions=True).getPositions()
 
 with open('confout.pdb', 'w') as f:
     PDBFile.writeFile(simulation.topology, positions, f)
-

@@ -1,12 +1,12 @@
 <ForceField>
 
 <AtomTypes>
-<Type name="O0" class="O0" element="O" mass="0.0"/>
-<Type name="C1" class="C1" element="C" mass="0.0"/>
-<Type name="C2" class="C2" element="C" mass="0.0"/>
-<Type name="H0" class="H0" element="H" mass="0.0"/>
-<Type name="H1" class="H1" element="H" mass="0.0"/>
-<Type name="H2" class="H2" element="H" mass="0.0"/>
+<Type name="O0" class="O0" element="O" mass="15.9994"/>
+<Type name="C1" class="C1" element="C" mass="12.011"/>
+<Type name="C2" class="C2" element="C" mass="12.011"/>
+<Type name="H0" class="H0" element="H" mass="1.0079"/>
+<Type name="H1" class="H1" element="H" mass="1.0079"/>
+<Type name="H2" class="H2" element="H" mass="1.0079"/>
 </AtomTypes>
 
 <Residues>

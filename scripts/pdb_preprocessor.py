@@ -138,6 +138,12 @@ class PDBPreprocessor:
             print(f"PDB file not found: {input_pdb}")
             sys.exit(1)
         
+        atom_records = []
+        other_records = []
+        atom_index_map = {}  # Maps PDB atom index to sequential index
+        residue_atom_positions = {}  # Track atom order within each residue
+        xml_residue_atoms = self.residue_atom_types  # XML atom definitions
+        
         # Process each line with simple approach
         for line in lines:
             if line.startswith(('ATOM', 'HETATM')):
@@ -152,11 +158,23 @@ class PDBPreprocessor:
                 original_atom_name = atom_name
                 converted_atom_name = atom_name
                 
-                # Check if atom name is a class and convert if needed
-                if self._is_atom_class(atom_name):
-                    converted_atom_name = self._convert_atom_name(atom_name)
-                    # Update the line with new atom name
-                    line = line[:12] + f"{converted_atom_name:>4}" + line[16:]
+                # Map PDB atom name to XML atom name by position within residue
+                residue_key = (residue_name, chain_id, residue_seq)
+                if residue_key not in residue_atom_positions:
+                    residue_atom_positions[residue_key] = {}
+                
+                if atom_name not in residue_atom_positions[residue_key]:
+                    # First time seeing this atom name in this residue
+                    position = len(residue_atom_positions[residue_key])
+                    residue_atom_positions[residue_key][atom_name] = position
+                    
+                    # Map to XML atom name by position
+                    if residue_name in xml_residue_atoms:
+                        xml_atom_list = list(xml_residue_atoms[residue_name].keys())
+                        if position < len(xml_atom_list):
+                            converted_atom_name = xml_atom_list[position]
+                            # Update the line with XML atom name
+                            line = line[:12] + f"{converted_atom_name:>4}" + line[16:]
                 
                 atom_records.append({
                     'line': line,
