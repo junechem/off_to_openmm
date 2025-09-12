@@ -58,18 +58,6 @@
 </Residue>
 </Residues>
 
-<NonbondedForce coulomb14scale="1.0" lj14scale="1.0">
-<Atom type="C3" charge="0.0" sigma="0.0" epsilon="0.0"/>
-<Atom type="C2" charge="0.0" sigma="0.0" epsilon="0.0"/>
-<Atom type="C1" charge="0.24499" sigma="0.0" epsilon="0.0"/>
-<Atom type="H3" charge="0.0" sigma="0.0" epsilon="0.0"/>
-<Atom type="H2" charge="0.0" sigma="0.0" epsilon="0.0"/>
-<Atom type="H1" charge="0.02204" sigma="0.0" epsilon="0.0"/>
-<Atom type="OW" charge="0.0" sigma="0.0" epsilon="0.0"/>
-<Atom type="HW" charge="0.6645" sigma="0.0" epsilon="0.0"/>
-<Atom type="M" charge="-1.329" sigma="0.0" epsilon="0.0"/>
-</NonbondedForce>
-
 <HarmonicBondForce>
 <Bond type1="C3" type2="C3" length="0.15262058" k="197764.60"/>
 <Bond type1="C2" type2="C3" length="0.15190283" k="193498.68"/>

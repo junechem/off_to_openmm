@@ -144,7 +144,7 @@ class PDBPreprocessor:
         residue_atom_positions = {}  # Track atom order within each residue
         xml_residue_atoms = self.residue_atom_types  # XML atom definitions
         
-        # Process each line with simple approach
+        # Process each line with direct XML atom name replacement
         for line in lines:
             if line.startswith(('ATOM', 'HETATM')):
                 # Parse ATOM/HETATM record (PDB format specification)
@@ -158,23 +158,23 @@ class PDBPreprocessor:
                 original_atom_name = atom_name
                 converted_atom_name = atom_name
                 
-                # Map PDB atom name to XML atom name by position within residue
+                # Direct replacement: if residue names match, use XML atom names in order
                 residue_key = (residue_name, chain_id, residue_seq)
                 if residue_key not in residue_atom_positions:
-                    residue_atom_positions[residue_key] = {}
+                    residue_atom_positions[residue_key] = 0  # Just track position counter
                 
-                if atom_name not in residue_atom_positions[residue_key]:
-                    # First time seeing this atom name in this residue
-                    position = len(residue_atom_positions[residue_key])
-                    residue_atom_positions[residue_key][atom_name] = position
+                # If this residue exists in XML, replace with XML atom name by position
+                if residue_name in xml_residue_atoms:
+                    xml_atom_list = list(xml_residue_atoms[residue_name].keys())
+                    position = residue_atom_positions[residue_key]
                     
-                    # Map to XML atom name by position
-                    if residue_name in xml_residue_atoms:
-                        xml_atom_list = list(xml_residue_atoms[residue_name].keys())
-                        if position < len(xml_atom_list):
-                            converted_atom_name = xml_atom_list[position]
-                            # Update the line with XML atom name
-                            line = line[:12] + f"{converted_atom_name:>4}" + line[16:]
+                    if position < len(xml_atom_list):
+                        converted_atom_name = xml_atom_list[position]
+                        # Update the line with XML atom name
+                        line = line[:12] + f"{converted_atom_name:>4}" + line[16:]
+                    
+                    # Increment position for next atom in this residue
+                    residue_atom_positions[residue_key] += 1
                 
                 atom_records.append({
                     'line': line,
