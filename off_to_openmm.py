@@ -9,6 +9,14 @@ import re
 import math
 from collections import defaultdict
 
+# Try to import OpenMM for atomic masses
+try:
+    from openmm.app import Element
+    OPENMM_AVAILABLE = True
+except ImportError:
+    OPENMM_AVAILABLE = False
+    print("Warning: OpenMM not found. Atom masses will be set to 0.0.")
+
 
 class OffFileParser:
     """Parser for CRYOFF .off files with support for multiple format variations."""
@@ -445,6 +453,20 @@ def get_element_from_atom_type(atom_type):
     return atom_type[0]
 
 
+def get_atomic_mass(element_symbol):
+    """Get atomic mass for an element symbol using OpenMM's Element class."""
+    if not OPENMM_AVAILABLE:
+        return 0.0
+    
+    try:
+        element = Element.getBySymbol(element_symbol)
+        # element.mass returns a Quantity object, need to get the value in atomic mass units
+        return float(element.mass.value_in_unit(element.mass.unit))
+    except Exception:
+        # Element not found or other error, return 0.0 as fallback
+        return 0.0
+
+
 def is_virtual_site_type(atom_type, molecules, selected_molnames=None):
     """Check if an atom type belongs to virtual sites."""
     for mol_name, mol_data in molecules.items():
@@ -462,12 +484,13 @@ def generate_atomtypes_xml(atom_types, molecules, selected_molnames=None):
     xml_lines = ['<AtomTypes>']
     
     for atom_type in atom_types:
-        # Virtual sites should not have an element attribute
+        # Virtual sites should not have an element attribute and should have mass="0.0"
         if is_virtual_site_type(atom_type, molecules, selected_molnames):
             xml_lines.append(f'<Type name="{atom_type}" class="{atom_type}" mass="0.0"/>')
         else:
             element = get_element_from_atom_type(atom_type)
-            xml_lines.append(f'<Type name="{atom_type}" class="{atom_type}" element="{element}" mass="0.0"/>')
+            mass = get_atomic_mass(element)
+            xml_lines.append(f'<Type name="{atom_type}" class="{atom_type}" element="{element}" mass="{mass}"/>')
     
     xml_lines.append('</AtomTypes>')
     return '\n'.join(xml_lines)
