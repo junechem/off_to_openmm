@@ -445,13 +445,29 @@ def get_element_from_atom_type(atom_type):
     return atom_type[0]
 
 
-def generate_atomtypes_xml(atom_types):
+def is_virtual_site_type(atom_type, molecules, selected_molnames=None):
+    """Check if an atom type belongs to virtual sites."""
+    for mol_name, mol_data in molecules.items():
+        if selected_molnames is None or mol_name in selected_molnames:
+            for atom_data in mol_data['atoms'].values():
+                if atom_data['type'] == atom_type:
+                    # Check if this atom is a virtual site
+                    if atom_data.get('special') or atom_data.get('virtual_site'):
+                        return True
+    return False
+
+
+def generate_atomtypes_xml(atom_types, molecules, selected_molnames=None):
     """Generate AtomTypes XML section."""
     xml_lines = ['<AtomTypes>']
     
     for atom_type in atom_types:
-        element = get_element_from_atom_type(atom_type)
-        xml_lines.append(f'<Type name="{atom_type}" class="{atom_type}" element="{element}" mass="0.0"/>')
+        # Virtual sites should not have an element attribute
+        if is_virtual_site_type(atom_type, molecules, selected_molnames):
+            xml_lines.append(f'<Type name="{atom_type}" class="{atom_type}" mass="0.0"/>')
+        else:
+            element = get_element_from_atom_type(atom_type)
+            xml_lines.append(f'<Type name="{atom_type}" class="{atom_type}" element="{element}" mass="0.0"/>')
     
     xml_lines.append('</AtomTypes>')
     return '\n'.join(xml_lines)
@@ -990,7 +1006,7 @@ def main():
     xml_sections = []
     
     # AtomTypes section
-    xml_sections.append(generate_atomtypes_xml(atom_types))
+    xml_sections.append(generate_atomtypes_xml(atom_types, molecules, selected_molnames))
     
     # Residues section (without charges)
     xml_sections.append(generate_residues_xml(molecules, selected_molnames, molname_translations))
