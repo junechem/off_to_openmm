@@ -25,7 +25,7 @@ class OffFileParser:
         self.filename = filename
         self.molecules = {}
         self.parameters = {}
-        self.nonbonded_interactions = {'COU': [], 'EXP': [], 'SRD': []}
+        self.nonbonded_interactions = {'COU': [], 'EXP': [], 'SRD': [], 'BUC': [], 'STR': []}
         
     def parse(self):
         """Parse the .off file and extract all relevant data."""
@@ -360,54 +360,94 @@ class OffFileParser:
                     }
     
     def _parse_nonbonded_interactions(self, content):
-        """Parse COU, EXP, and SRD interaction sections."""
+        """Parse nonbonded interactions from Inter-Potential section at bottom of file."""
         lines = content.split('\n')
-        i = 0
         
-        while i < len(lines):
-            line = lines[i].strip()
-            
-            # Parse COU section
-            if line.startswith('[ COU ]'):
-                i = self._parse_interaction_section(lines, i + 1, 'COU')
-            # Parse EXP section
-            elif line.startswith('[ EXP ]'):
-                i = self._parse_interaction_section(lines, i + 1, 'EXP')
-            # Parse SRD section
-            elif line.startswith('[ SRD ]'):
-                i = self._parse_interaction_section(lines, i + 1, 'SRD')
-            else:
-                i += 1
-    
-    def _parse_interaction_section(self, lines, start_idx, interaction_type):
-        """Parse a nonbonded interaction section."""
-        i = start_idx
-        # Skip the interaction count line
-        if i < len(lines) and lines[i].strip().isdigit():
-            i += 1
-            
-        while i < len(lines):
-            line = lines[i].strip()
-            
-            if line.startswith('[') or not line:
+        # Find the Inter-Potential section
+        start_idx = -1
+        for i, line in enumerate(lines):
+            if line.strip().startswith('Inter-Potential:'):
+                start_idx = i + 1
                 break
-                
-            parts = line.split()
-            if len(parts) >= 4:
-                atom1 = parts[0]
-                atom2 = parts[1]
-                fix_flag = parts[2]
-                values = parts[3:]
-                
-                self.nonbonded_interactions[interaction_type].append({
-                    'atom1': atom1,
-                    'atom2': atom2,
-                    'fix_flag': fix_flag,
-                    'values': values
-                })
-            i += 1
+        
+        if start_idx == -1:
+            print("Warning: Inter-Potential section not found in .off file")
+            return
+        
+        # Parse interactions until we hit Molecular-Definition or end of file
+        for i in range(start_idx, len(lines)):
+            line = lines[i].strip()
             
-        return i
+            # Stop at Molecular-Definition or empty sections
+            if line.startswith('Molecular-Definition:') or not line:
+                continue
+            
+            # Parse interaction lines: ATOM1~ATOM2: TYPE param1 param2 param3 Min: X Max: Y
+            if '~' in line and ':' in line:
+                self._parse_inter_potential_line(line)
+    
+    def _parse_inter_potential_line(self, line):
+        """Parse a single line from Inter-Potential section.
+        
+        Format: ATOM1~ATOM2: TYPE param1 param2 param3 Min: X Max: Y
+        """
+        try:
+            # Split at the colon to separate atom pair from the rest
+            atom_part, rest = line.split(':', 1)
+            atom_pair = atom_part.strip()
+            
+            # Extract atom types from ATOM1~ATOM2 format
+            if '~' not in atom_pair:
+                return
+            atom1, atom2 = atom_pair.split('~', 1)
+            
+            # Parse the rest: TYPE param1 param2 param3 Min: X Max: Y
+            parts = rest.strip().split()
+            if len(parts) < 2:  # Need at least interaction type and one parameter
+                return
+                
+            interaction_type = parts[0]
+            
+            # Find where "Min:" appears to know where parameters end
+            min_idx = -1
+            for i, part in enumerate(parts):
+                if part == 'Min:':
+                    min_idx = i
+                    break
+            
+            # Extract parameters (everything between interaction type and Min:)
+            if min_idx > 1:
+                values = parts[1:min_idx]
+            else:
+                # If no Min: found, take all remaining parts as parameters
+                values = parts[1:]
+            
+            # Map interaction type to our categories
+            if interaction_type == 'COU':
+                interaction_key = 'COU'
+            elif interaction_type == 'EXP':
+                interaction_key = 'EXP'
+            elif interaction_type == 'SRD':
+                interaction_key = 'SRD'
+            elif interaction_type in ['BUC', 'BUCK']:
+                interaction_key = 'BUC'
+            elif interaction_type in ['STR', 'STRC']:
+                interaction_key = 'STR'
+            else:
+                # Skip unknown interaction types
+                return
+            
+            # Add to nonbonded interactions
+            self.nonbonded_interactions[interaction_key].append({
+                'atom1': atom1,
+                'atom2': atom2,
+                'fix_flag': 'FIX',  # Not specified in Inter-Potential format
+                'values': values
+            })
+            
+        except (ValueError, IndexError) as e:
+            # Skip malformed lines
+            pass
 
 
 def read_charges_file(filename):
@@ -843,6 +883,43 @@ def generate_periodic_torsion_force_xml(dihedral_types, parameters):
     return '\n'.join(xml_lines)
 
 
+def process_buc_interactions(nonbonded_interactions):
+    """Process BUC interactions and add equivalent EXP and SRD entries.
+    
+    BUC interaction: U(r) = P2/r^6 + P1*exp(-P3*r)
+    - P1*exp(-P3*r) goes to EXP section
+    - P2/r^6 goes to SRD section with r0=0
+    """
+    for interaction in nonbonded_interactions['BUC']:
+        if len(interaction['values']) >= 3:
+            atom1 = interaction['atom1']
+            atom2 = interaction['atom2']
+            fix_flag = interaction['fix_flag']
+            
+            # BUC parameters: P1, P2, P3
+            p1 = float(interaction['values'][0])  # kcal/mol (for exp term)
+            p2 = float(interaction['values'][1])  # kcal*angstrom^6/mol (for r^-6 term)
+            p3 = float(interaction['values'][2])  # 1/angstrom (for exp term)
+            
+            # Add P1*exp(-P3*r) to EXP section
+            exp_entry = {
+                'atom1': atom1,
+                'atom2': atom2,
+                'fix_flag': fix_flag,
+                'values': [str(p1), str(p3)]
+            }
+            nonbonded_interactions['EXP'].append(exp_entry)
+            
+            # Add P2/r^6 to SRD section with r0=0
+            srd_entry = {
+                'atom1': atom1,
+                'atom2': atom2,
+                'fix_flag': fix_flag,
+                'values': [str(p2), '-6', '0.0']  # P1, power, r0
+            }
+            nonbonded_interactions['SRD'].append(srd_entry)
+
+
 def create_interaction_matrices(nonbonded_interactions, interaction_type, atom_types):
     """Create symmetric matrices for nonbonded interactions."""
     n_types = len(atom_types)
@@ -896,6 +973,35 @@ def create_interaction_matrices(nonbonded_interactions, interaction_type, atom_t
                     alpha_matrix[i][j] = alpha_matrix[j][i] = alpha_value
         
         return {'a_matrix': a_matrix, 'alpha_matrix': alpha_matrix}
+    
+    elif interaction_type == 'STR':
+        # Initialize matrices
+        p1_matrix = [[0.0 for _ in range(n_types)] for _ in range(n_types)]
+        p2_matrix = [[0.0 for _ in range(n_types)] for _ in range(n_types)]
+        p3_matrix = [[0.0 for _ in range(n_types)] for _ in range(n_types)]
+        
+        for interaction in nonbonded_interactions['STR']:
+            if len(interaction['values']) >= 3:
+                atom1, atom2 = interaction['atom1'], interaction['atom2']
+                if atom1 in atom_types and atom2 in atom_types:
+                    i, j = atom_types.index(atom1), atom_types.index(atom2)
+                    
+                    # Unit conversions for STR parameters
+                    p1_off = float(interaction['values'][0])  # kcal/mol (in Angstrom^P2 units)
+                    p2_value = float(interaction['values'][1])  # dimensionless
+                    p3_off = float(interaction['values'][2])   # Angstrom
+                    
+                    # Convert P1: kcal/mol*Angstrom^P2 to kJ/mol*nm^P2
+                    p1_value = p1_off * 4.184 * (0.1**p2_value)
+                    # P2 remains dimensionless
+                    # Convert P3: Angstrom to nm
+                    p3_value = p3_off * 0.1
+                    
+                    p1_matrix[i][j] = p1_matrix[j][i] = p1_value
+                    p2_matrix[i][j] = p2_matrix[j][i] = p2_value
+                    p3_matrix[i][j] = p3_matrix[j][i] = p3_value
+        
+        return {'p1_matrix': p1_matrix, 'p2_matrix': p2_matrix, 'p3_matrix': p3_matrix}
 
 
 def matrix_to_xml_string(matrix):
@@ -926,6 +1032,51 @@ def generate_srd_custom_force_xml(power, matrices, atom_types):
     # R0 table
     xml_lines.append(f'<Function name="rTable" type="Discrete2D" xsize="{n_types}" ysize="{n_types}">')
     xml_lines.append(matrix_to_xml_string(r0_matrix))
+    xml_lines.append('</Function>')
+    
+    # Per-particle parameter
+    xml_lines.append('<PerParticleParameter name="t"/>')
+    
+    # Atom type assignments
+    for i, atom_type in enumerate(atom_types):
+        xml_lines.append(f'<Atom type="{atom_type}" t="{i}"/>')
+    
+    xml_lines.append('</CustomNonbondedForce>')
+    return '\n'.join(xml_lines)
+
+
+def generate_str_custom_force_xml(matrices, atom_types):
+    """Generate CustomNonbondedForce XML for STR interactions.
+    
+    STR interaction:
+    if r <= P3: U(r) = P1*((1/r^P2) - (1/P3^P2) + (P2*(r - P3))/(P3^(P2 + 1)))
+    if r > P3:  U(r) = 0
+    """
+    n_types = len(atom_types)
+    p1_matrix = matrices['p1_matrix']
+    p2_matrix = matrices['p2_matrix'] 
+    p3_matrix = matrices['p3_matrix']
+    
+    xml_lines = []
+    # Use step function: step(P3 - r) = 1 if r <= P3, 0 if r > P3
+    energy_expr = "step(p3 - r) * p1 * ((1/r^p2) - (1/p3^p2) + (p2*(r - p3))/(p3^(p2 + 1))); "
+    energy_expr += "p1=p1Table(t1,t2); p2=p2Table(t1,t2); p3=p3Table(t1,t2)"
+    
+    xml_lines.append(f'<CustomNonbondedForce energy="{energy_expr}" bondCutoff="2">')
+    
+    # P1 table
+    xml_lines.append(f'<Function name="p1Table" type="Discrete2D" xsize="{n_types}" ysize="{n_types}">')
+    xml_lines.append(matrix_to_xml_string(p1_matrix))
+    xml_lines.append('</Function>')
+    
+    # P2 table  
+    xml_lines.append(f'<Function name="p2Table" type="Discrete2D" xsize="{n_types}" ysize="{n_types}">')
+    xml_lines.append(matrix_to_xml_string(p2_matrix))
+    xml_lines.append('</Function>')
+    
+    # P3 table
+    xml_lines.append(f'<Function name="p3Table" type="Discrete2D" xsize="{n_types}" ysize="{n_types}">')
+    xml_lines.append(matrix_to_xml_string(p3_matrix))
     xml_lines.append('</Function>')
     
     # Per-particle parameter
@@ -1056,6 +1207,11 @@ def main():
     if dihedral_types and parameters.get('dihedrals'):
         xml_sections.append(generate_periodic_torsion_force_xml(dihedral_types, parameters))
     
+    # Process BUC interactions and convert to EXP and SRD components
+    if nonbonded_interactions['BUC']:
+        print("Processing BUC interactions...")
+        process_buc_interactions(nonbonded_interactions)
+    
     # Generate CustomNonbondedForce sections for EXP and SRD
     if nonbonded_interactions['EXP']:
         print("Generating EXP CustomNonbondedForce...")
@@ -1067,6 +1223,11 @@ def main():
         srd_matrices_by_power = create_interaction_matrices(nonbonded_interactions, 'SRD', atom_types)
         for power in sorted(srd_matrices_by_power.keys()):
             xml_sections.append(generate_srd_custom_force_xml(power, srd_matrices_by_power[power], atom_types))
+    
+    if nonbonded_interactions['STR']:
+        print("Generating STR CustomNonbondedForce...")
+        str_matrices = create_interaction_matrices(nonbonded_interactions, 'STR', atom_types)
+        xml_sections.append(generate_str_custom_force_xml(str_matrices, atom_types))
     
     # Write output file
     print(f"Writing {args.output}...")
