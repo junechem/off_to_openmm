@@ -17,7 +17,7 @@ timestep_size   = 0.0005 # picoseconds
 friction_coeff  = 2/picosecond
 dispcorr_freq   = 25  # steps
 nmol            = 125  # molecules
-rcut            = 1E-9  # meters
+rcut            = 0.9E-9  # meters
 max_bond_exclusions = 2  # NEW: Exclude interactions up to N bonds away
 
 def replace_nonbonded_with_matching_exclusions(system):
@@ -162,7 +162,7 @@ def get_r6_correction(forcefield_xml, topology, cutoff_nm):
 
 
 
-pdb = PDBFile('conf_fixed.pdb')
+pdb = PDBFile('conf.pdb')
 forcefield = ForceField('forcefield.xml')
 system = forcefield.createSystem(pdb.topology, nonbondedMethod=app.PME, nonbondedCutoff=rcut*meter)
 
@@ -199,7 +199,7 @@ for force in system.getForces():
         break
 
 n_beads = 32
-system.addForce(MonteCarloBarostat(pressure, temperature, 25))
+#system.addForce(MonteCarloBarostat(pressure, temperature, 25))
 
 # Setup dispersion correction
 pcorr = get_r6_correction('forcefield.xml', pdb.topology, rcut*1e9)
@@ -228,6 +228,7 @@ for i, f in enumerate(system.getForces()):
         print(f"{f.getName()}: {energy}")
 
 simulation.context.setVelocitiesToTemperature(temperature)
+simulation.minimizeEnergy()
 
 print("\n=== INITIAL ENERGIES (after setting velocities) ===")
 for i, f in enumerate(system.getForces()):
@@ -249,7 +250,7 @@ for i in np.arange(0, length/timestep_size, dispcorr_freq):
     pressure_correction = pcorr(volume_m3)
     new_p = 1 - pressure_correction  # Same pattern as working Water_Example
     #print(f"Volume: {volume_m3:.6e} m³, Pcorr: {pressure_correction:.6f} bar, New P: {new_p:.6f} bar")
-    simulation.context.setParameter(MonteCarloBarostat.Pressure(), new_p*bar)
+    #simulation.context.setParameter(MonteCarloBarostat.Pressure(), new_p*bar)
     simulation.step(dispcorr_freq)
 
 print("\n=== FINAL ENERGIES (after simulation) ===")

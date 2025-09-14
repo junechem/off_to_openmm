@@ -1,14 +1,14 @@
 <ForceField>
 
 <AtomTypes>
-<Type name="C3" class="C3" element="C" mass="12.01078"/>
-<Type name="C2" class="C2" element="C" mass="12.01078"/>
-<Type name="C1" class="C1" element="C" mass="12.01078"/>
-<Type name="H3" class="H3" element="H" mass="1.007947"/>
-<Type name="H2" class="H2" element="H" mass="1.007947"/>
-<Type name="H1" class="H1" element="H" mass="1.007947"/>
-<Type name="OW" class="OW" element="O" mass="15.99943"/>
-<Type name="HW" class="HW" element="H" mass="1.007947"/>
+<Type name="C3" class="C3" element="C" mass="0.0"/>
+<Type name="C2" class="C2" element="C" mass="0.0"/>
+<Type name="C1" class="C1" element="C" mass="0.0"/>
+<Type name="H3" class="H3" element="H" mass="0.0"/>
+<Type name="H2" class="H2" element="H" mass="0.0"/>
+<Type name="H1" class="H1" element="H" mass="0.0"/>
+<Type name="OW" class="OW" element="O" mass="0.0"/>
+<Type name="HW" class="HW" element="H" mass="0.0"/>
 <Type name="M" class="M" mass="0.0"/>
 </AtomTypes>
 
@@ -57,18 +57,6 @@
 <VirtualSite type="average3" siteName="M0" atomName1="O0" atomName2="H10" atomName3="H11" weight1="0.6" weight2="0.2" weight3="0.2"/>
 </Residue>
 </Residues>
-
-<NonbondedForce coulomb14scale="1.0" lj14scale="1.0">
-<Atom type="C3" charge="0.0" sigma="0.0" epsilon="0.0"/>
-<Atom type="C2" charge="0.0" sigma="0.0" epsilon="0.0"/>
-<Atom type="C1" charge="0.0" sigma="0.0" epsilon="0.0"/>
-<Atom type="H3" charge="0.0" sigma="0.0" epsilon="0.0"/>
-<Atom type="H2" charge="0.0" sigma="0.0" epsilon="0.0"/>
-<Atom type="H1" charge="0.0" sigma="0.0" epsilon="0.0"/>
-<Atom type="OW" charge="0.0" sigma="0.0" epsilon="0.0"/>
-<Atom type="HW" charge="0.6645" sigma="0.0" epsilon="0.0"/>
-<Atom type="M" charge="-1.329" sigma="0.0" epsilon="0.0"/>
-</NonbondedForce>
 
 <HarmonicBondForce>
 <Bond type1="C3" type2="C3" length="0.15262058" k="197764.60"/>
@@ -136,6 +124,28 @@
 </Function>
 <Function name="rTable" type="Discrete2D" xsize="9" ysize="9">
 0.0	0.0	0.0	0.0	0.0	0.0	0.19970000000000002	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.19970000000000002	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.20350000000000001	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.19970000000000002	0.19970000000000002	0.20350000000000001	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0
+</Function>
+<PerParticleParameter name="t"/>
+<Atom type="C3" t="0"/>
+<Atom type="C2" t="1"/>
+<Atom type="C1" t="2"/>
+<Atom type="H3" t="3"/>
+<Atom type="H2" t="4"/>
+<Atom type="H1" t="5"/>
+<Atom type="OW" t="6"/>
+<Atom type="HW" t="7"/>
+<Atom type="M" t="8"/>
+</CustomNonbondedForce>
+
+<CustomNonbondedForce energy="step(p3 - r) * p1 * ((1/r^p2) - (1/p3^p2) + (p2*(r - p3))/(p3^(p2 + 1))); p1=p1Table(t1,t2); p2=p2Table(t1,t2); p3=p3Table(t1,t2)" bondCutoff="2">
+<Function name="p1Table" type="Discrete2D" xsize="9" ysize="9">
+0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.03409499760000001	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.03409499760000001	0.0
+</Function>
+<Function name="p2Table" type="Discrete2D" xsize="9" ysize="9">
+0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	4.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	4.0	0.0
+</Function>
+<Function name="p3Table" type="Discrete2D" xsize="9" ysize="9">
+0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.24830000000000002	0.0	0.0	0.0	0.0	0.0	0.0	0.0	0.24830000000000002	0.0
 </Function>
 <PerParticleParameter name="t"/>
 <Atom type="C3" t="0"/>
