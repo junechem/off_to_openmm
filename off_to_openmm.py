@@ -25,7 +25,7 @@ class OffFileParser:
         self.filename = filename
         self.molecules = {}
         self.parameters = {}
-        self.nonbonded_interactions = {'COU': [], 'EXP': [], 'SRD': [], 'BUC': [], 'STR': []}
+        self.nonbonded_interactions = {'COU': [], 'EXP': [], 'SRD': [], 'BUC': [], 'STR': [], 'POW': []}
         
     def parse(self):
         """Parse the .off file and extract all relevant data."""
@@ -433,6 +433,8 @@ class OffFileParser:
                 interaction_key = 'BUC'
             elif interaction_type in ['STR', 'STRC']:
                 interaction_key = 'STR'
+            elif interaction_type == 'POW':
+                interaction_key = 'POW'
             else:
                 # Skip unknown interaction types
                 return
@@ -920,6 +922,36 @@ def process_buc_interactions(nonbonded_interactions):
             nonbonded_interactions['SRD'].append(srd_entry)
 
 
+def process_pow_interactions(nonbonded_interactions):
+    """Process POW interactions and add equivalent SRD entries.
+    
+    POW interaction: U(r) = P1*r^P2
+    - This goes to SRD section with r0=0 as P1/(r^-P2 + 0^-P2) = P1*r^P2
+    """
+    for interaction in nonbonded_interactions['POW']:
+        if len(interaction['values']) >= 2:
+            atom1 = interaction['atom1']
+            atom2 = interaction['atom2']
+            fix_flag = interaction['fix_flag']
+            
+            # POW parameters: P1, P2
+            p1 = float(interaction['values'][0])  # kcal*angstrom^P2/mol 
+            p2 = float(interaction['values'][1])  # dimensionless power
+            
+            # POW: U(r) = P1*r^P2
+            # Convert to SRD format: P1/(r^power + r0^power) with r0=0
+            # SRD unit conversion will handle: P1 * 4.184 * (0.1**(-power))
+            # We want: P1 * 4.184 * (0.1**abs(P2))
+            # So we need: power = -abs(P2) so that (0.1**(-power)) = (0.1**abs(P2))
+            srd_entry = {
+                'atom1': atom1,
+                'atom2': atom2,
+                'fix_flag': fix_flag,
+                'values': [str(p1), str(p2), '0.0']  # P1, P2 (as-is), r0=0
+            }
+            nonbonded_interactions['SRD'].append(srd_entry)
+
+
 def create_interaction_matrices(nonbonded_interactions, interaction_type, atom_types):
     """Create symmetric matrices for nonbonded interactions."""
     n_types = len(atom_types)
@@ -1211,6 +1243,11 @@ def main():
     if nonbonded_interactions['BUC']:
         print("Processing BUC interactions...")
         process_buc_interactions(nonbonded_interactions)
+    
+    # Process POW interactions and convert to SRD components  
+    if nonbonded_interactions['POW']:
+        print("Processing POW interactions...")
+        process_pow_interactions(nonbonded_interactions)
     
     # Generate CustomNonbondedForce sections for EXP and SRD
     if nonbonded_interactions['EXP']:
