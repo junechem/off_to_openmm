@@ -81,19 +81,19 @@ class OffFileParser:
                 break
                 
             # Parse atoms section
-            if re.search(r'\[\s*ATOMS?\s*\]', line):
+            if re.search(r'\[\s*ATO', line):
                 i = self._parse_atoms_section(lines, i + 1, mol_name)
-            # Parse bonds section  
-            elif re.search(r'\[\s*BONDS?\s*\]', line):
+            # Parse bonds section
+            elif re.search(r'\[\s*BON', line):
                 i = self._parse_bonds_section(lines, i + 1, mol_name)
             # Parse angles section
-            elif re.search(r'\[\s*ANGLES?\s*\]', line):
+            elif re.search(r'\[\s*ANG', line):
                 i = self._parse_angles_section(lines, i + 1, mol_name)
             # Parse dihedrals section
-            elif re.search(r'\[\s*DIHEDRALS?\s*\]', line):
+            elif re.search(r'\[\s*DIH', line):
                 i = self._parse_dihedrals_section(lines, i + 1, mol_name)
             # Parse exclusions section
-            elif re.search(r'\[\s*EXC\s*\]', line):
+            elif re.search(r'\[\s*EXC', line):
                 i = self._parse_exclusions_section(lines, i + 1, mol_name)
             else:
                 i += 1
